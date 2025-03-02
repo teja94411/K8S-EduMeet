@@ -1,0 +1,15 @@
+apiversion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+    spec:
+      containers:
+      -  name: frontend
+         image: tejaroyal/edufrontend:latest
+         ports:
+         - containerPort: 80
