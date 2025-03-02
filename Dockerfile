@@ -1,9 +1,9 @@
-FROM nginx:latest
+FROM nginx:latest AS frontend-build
 WORKDIR /frontend
 COPY frontend/ .
 
 FROM python:3.9-slim
-WORKDIR /backend
+WORKDIR /backend AS backend-build
 COPY backend/ .
 RUN pip install --no-cache-dir -r requirements.txt
 
