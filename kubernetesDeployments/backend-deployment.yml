@@ -14,6 +14,6 @@ spec:
     spec:
       containers:
       - name: backend
-        image: tejaroyal/backend:latest
+        image: tejaroyal/edubackend-app:latest
         ports:
         - containerPort: 5000    

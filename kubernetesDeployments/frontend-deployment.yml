@@ -10,6 +10,6 @@ spec:
     spec:
       containers:
       -  name: frontend
-         image: tejaroyal/edufrontend:latest
+         image: tejaroyal/edufrontend-app:latest
          ports:
          - containerPort: 80
