@@ -1,0 +1,226 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_CREDENTIALS_ID = 'docker-container-hub-cred'
+        FRONTEND_IMAGE = 'tejaroyal/edufrontend-app'
+        BACKEND_IMAGE = 'tejaroyal/edubackend-app'
+        K8S_NAMESPACE = 'edu-meet'
+        MAVEN_HOME = '/usr/local/maven'  // Adjust according to the installation path on Unix
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            git clone https://github.com/teja94411/K8S-EduMeet.git
+                            cd K8S-EduMeet
+                            git checkout main
+                        '''
+                    } else {
+                        bat '''
+                            git clone https://github.com/teja94411/K8S-EduMeet.git
+                            cd K8S-EduMeet
+                            git checkout main
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        if (isUnix()) {
+                            sh '''
+                                echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                            '''
+                        } else {
+                            bat '''
+                                echo %DOCKER_PASS% > pass.txt
+                                docker login -u %DOCKER_USER% --password-stdin < pass.txt
+                                del pass.txt
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            mvn clean install -DskipTests
+                        '''
+                    } else {
+                        bat '''
+                            mvn clean install -DskipTests
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Docker Images') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            docker build -t $FRONTEND_IMAGE -f Dockerfile .
+                            docker build -t $BACKEND_IMAGE -f Dockerfile .
+                            docker push $FRONTEND_IMAGE
+                            docker push $BACKEND_IMAGE
+                        '''
+                    } else {
+                        bat '''
+                            docker build -t %FRONTEND_IMAGE% -f Dockerfile .
+                            docker build -t %BACKEND_IMAGE% -f Dockerfile .
+                            docker push %FRONTEND_IMAGE%
+                            docker push %BACKEND_IMAGE%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Create Kubernetes Namespace') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl create namespace $K8S_NAMESPACE || echo 'Namespace already exists'
+                        '''
+                    } else {
+                        bat '''
+                            kubectl create namespace %K8S_NAMESPACE% || echo 'Namespace already exists'
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy ConfigMap and Secrets') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl create configmap edu-app-config --from-literal=APP_ENV=production --namespace=$K8S_NAMESPACE || echo 'ConfigMap already exists'
+                            kubectl create secret generic edu-db-credentials --from-literal=DB_USER=admin --from-literal=DB_PASSWORD=secret123 --namespace=$K8S_NAMESPACE || echo 'Secret already exists'
+                        '''
+                    } else {
+                        bat '''
+                            kubectl create configmap edu-app-config --from-literal=APP_ENV=production --namespace=%K8S_NAMESPACE% || echo 'ConfigMap already exists'
+                            kubectl create secret generic edu-db-credentials --from-literal=DB_USER=admin --from-literal=DB_PASSWORD=secret123 --namespace=%K8S_NAMESPACE% || echo 'Secret already exists'
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Application to Kubernetes') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl apply -f k8s/deployment/frontend-deployment.yaml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f k8s/deployment/backend-deployment.yaml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f k8s/deployment/postgres-deployment.yaml --namespace=$K8S_NAMESPACE
+                        '''
+                    } else {
+                        bat '''
+                            kubectl apply -f k8s/deployment/frontend-deployment.yaml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f k8s/deployment/backend-deployment.yaml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f k8s/deployment/postgres-deployment.yaml --namespace=%K8S_NAMESPACE%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy DaemonSet for Logging') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl apply -f k8s/daemonset/logging-daemonset.yaml --namespace=$K8S_NAMESPACE
+                        '''
+                    } else {
+                        bat '''
+                            kubectl apply -f k8s/daemonset/logging-daemonset.yaml --namespace=%K8S_NAMESPACE%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Scale Application (ReplicaSets)') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl scale deployment frontend-deployment --replicas=3 --namespace=$K8S_NAMESPACE
+                            kubectl scale deployment backend-deployment --replicas=3 --namespace=$K8S_NAMESPACE
+                        '''
+                    } else {
+                        bat '''
+                            kubectl scale deployment frontend-deployment --replicas=3 --namespace=%K8S_NAMESPACE%
+                            kubectl scale deployment backend-deployment --replicas=3 --namespace=%K8S_NAMESPACE%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Set Up Ingress Resource') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl apply -f k8s/ingress/frontend-ingress.yaml --namespace=$K8S_NAMESPACE
+                        '''
+                    } else {
+                        bat '''
+                            kubectl apply -f k8s/ingress/frontend-ingress.yaml --namespace=%K8S_NAMESPACE%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Final Verification') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            kubectl get pods --namespace=$K8S_NAMESPACE
+                            kubectl get services --namespace=$K8S_NAMESPACE
+                            kubectl get ingress --namespace=$K8S_NAMESPACE
+                            kubectl get daemonset --namespace=$K8S_NAMESPACE
+                        '''
+                    } else {
+                        bat '''
+                            kubectl get pods --namespace=%K8S_NAMESPACE%
+                            kubectl get services --namespace=%K8S_NAMESPACE%
+                            kubectl get ingress --namespace=%K8S_NAMESPACE%
+                            kubectl get daemonset --namespace=%K8S_NAMESPACE%
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline executed successfully! Deployment is stable.'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs for details.'
+        }
+    }
+}

@@ -1,0 +1,47 @@
+# apiVersion: apps/v1
+# kind: DaemonSet
+# metadata:
+#   name: logging-agent
+#   namespace: edu-meet
+# spec:
+#   selector:
+#     matchLabels:
+#       name: logging-agent
+#   template:
+#     metadata:
+#       labels:
+#         name: logging-agent
+#     spec:
+#       containers:
+#         - name: logging-agent
+#           image: your-logging-agent-image:latest
+#           ports:
+#             - containerPort: 80
+#           volumeMounts:
+#             - mountPath: /var/log
+#               name: varlog
+#       volumes:
+#         - name: varlog
+#           hostPath:
+#             path: /var/log
+#             type: Directory
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: logging-daemonset
+  namespace: edu-meet
+spec:
+  selector:
+    matchLabels:
+      app: logging-agent
+  template:
+    metadata:
+      labels:
+        app: logging-agent
+    spec:
+      containers:
+      - name: logging-agent
+        image: "fluent/fluentd"
+        ports:
+        - containerPort: 24224
