@@ -7,6 +7,10 @@ spec:
   selector:
     matchLabels:
       app: frontend
+  template:
+    metadata:
+      labels:
+        app: backend
     spec:
       containers:
       -  name: frontend
