@@ -6,38 +6,56 @@ pipeline {
         FRONTEND_IMAGE = 'tejaroyal/edufrontend-app'
         BACKEND_IMAGE = 'tejaroyal/edubackend-app'
         K8S_NAMESPACE = 'edu-meet'
-        MAVEN_HOME = '/usr/local/maven'  // Adjust according to the installation path on Unix
+        K8S_YAML_PATH = 'C:/Users/Admin/Desktop/GITHUB/K8S-EduMeet/kubernetesDeployments'
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('checkout code') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: '3f601ce9-7463-4bde-bf20-ca21df940366', url: 'https://github.com/teja94411/K8S-EduMeet.git']])
+            }
+        }
+        stage('Check Minikube') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh '''
-                            git clone https://github.com/teja94411/K8S-EduMeet.git
-                            cd K8S-EduMeet
-                            git checkout main
-                        '''
-                    } else {
-                        bat '''
-                            git clone https://github.com/teja94411/K8S-EduMeet.git
-                            cd K8S-EduMeet
-                            git checkout main
-                        '''
-                    }
+                    // Print out the PATH to debug if Minikube is in the PATH
+                    bat 'echo %PATH%'
+                    // Check if Minikube is available in PATH
+                    bat 'minikube version'
                 }
             }
         }
+        stage('Set Up Minikube') {
+            steps {
+                script {
+                    // Check if Minikube is already running
+                    def minikubeStatus = bat(script: 'minikube status', returnStatus: true)
+                    if (minikubeStatus != 0) {
+                        echo 'Minikube is not running. Starting Minikube...'
+                        bat 'minikube start --driver=docker'
+                    } else {
+                        echo 'Minikube is already running.'
+                    }
 
+                    // Set Docker environment for Minikube
+                    bat 'minikube -p minikube docker-env --shell cmd'
+                }
+            }
+        }
+        stage('Set kubectl Context') {
+            steps {
+                script {
+                    // Set kubectl to use Minikube context
+                    bat 'kubectl config use-context minikube'
+                }
+            }
+        }
         stage('Login to Docker Hub') {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         if (isUnix()) {
-                            sh '''
-                                echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                            '''
+                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                         } else {
                             bat '''
                                 echo %DOCKER_PASS% > pass.txt
@@ -45,49 +63,27 @@ pipeline {
                                 del pass.txt
                             '''
                         }
-                    }
+                    }    
                 }
             }
         }
-
-        stage('Maven Build') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            mvn clean install -DskipTests
-                        '''
-                    } else {
-                        bat '''
-                            mvn clean install -DskipTests
-                        '''
-                    }
-                }
-            }
-        }
-
         stage('Build & Push Docker Images') {
             steps {
                 script {
                     if (isUnix()) {
-                        sh '''
-                            docker build -t $FRONTEND_IMAGE -f Dockerfile .
-                            docker build -t $BACKEND_IMAGE -f Dockerfile .
-                            docker push $FRONTEND_IMAGE
-                            docker push $BACKEND_IMAGE
-                        '''
+                        sh "docker build -t $FRONTEND_IMAGE -f Dockerfile ."
+                        sh "docker build -t $BACKEND_IMAGE -f Dockerfile ."
+                        sh "docker push $FRONTEND_IMAGE"
+                        sh "docker push $BACKEND_IMAGE"
                     } else {
-                        bat '''
-                            docker build -t %FRONTEND_IMAGE% -f Dockerfile .
-                            docker build -t %BACKEND_IMAGE% -f Dockerfile .
-                            docker push %FRONTEND_IMAGE%
-                            docker push %BACKEND_IMAGE%
-                        '''
+                        bat "docker build -t %FRONTEND_IMAGE% -f Dockerfile ."
+                        bat "docker build -t %BACKEND_IMAGE% -f Dockerfile ."
+                        bat "docker push %FRONTEND_IMAGE%"
+                        bat "docker push %BACKEND_IMAGE%"
                     }
                 }
             }
         }
-
         stage('Create Kubernetes Namespace') {
             steps {
                 script {
@@ -103,7 +99,6 @@ pipeline {
                 }
             }
         }
-
         stage('Deploy ConfigMap and Secrets') {
             steps {
                 script {
@@ -121,37 +116,35 @@ pipeline {
                 }
             }
         }
-
         stage('Deploy Application to Kubernetes') {
             steps {
                 script {
                     if (isUnix()) {
                         sh '''
-                            kubectl apply -f k8s/deployment/frontend-deployment.yaml --namespace=$K8S_NAMESPACE
-                            kubectl apply -f k8s/deployment/backend-deployment.yaml --namespace=$K8S_NAMESPACE
-                            kubectl apply -f k8s/deployment/postgres-deployment.yaml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f $K8S_YAML_PATH/frontend-deployment.yml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f $K8S_YAML_PATH/backend-deployment.yml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f $K8S_YAML_PATH/postgres-deployment.yml --namespace=$K8S_NAMESPACE
                         '''
                     } else {
                         bat '''
-                            kubectl apply -f k8s/deployment/frontend-deployment.yaml --namespace=%K8S_NAMESPACE%
-                            kubectl apply -f k8s/deployment/backend-deployment.yaml --namespace=%K8S_NAMESPACE%
-                            kubectl apply -f k8s/deployment/postgres-deployment.yaml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f %K8S_YAML_PATH%\\frontend-deployment.yml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f %K8S_YAML_PATH%\\backend-deployment.yml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f %K8S_YAML_PATH%\\postgres-deployment.yml --namespace=%K8S_NAMESPACE%
                         '''
                     }
                 }
             }
         }
-
         stage('Deploy DaemonSet for Logging') {
             steps {
                 script {
                     if (isUnix()) {
                         sh '''
-                            kubectl apply -f k8s/daemonset/logging-daemonset.yaml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f $K8S_YAML_PATH/logging-daemonset.yml --namespace=$K8S_NAMESPACE
                         '''
                     } else {
                         bat '''
-                            kubectl apply -f k8s/daemonset/logging-daemonset.yaml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f %K8S_YAML_PATH%\\logging-daemonset.yml --namespace=%K8S_NAMESPACE%
                         '''
                     }
                 }
@@ -181,11 +174,11 @@ pipeline {
                 script {
                     if (isUnix()) {
                         sh '''
-                            kubectl apply -f k8s/ingress/frontend-ingress.yaml --namespace=$K8S_NAMESPACE
+                            kubectl apply -f $K8S_YAML_PATH/ingress.yml --namespace=$K8S_NAMESPACE
                         '''
                     } else {
                         bat '''
-                            kubectl apply -f k8s/ingress/frontend-ingress.yaml --namespace=%K8S_NAMESPACE%
+                            kubectl apply -f %K8S_YAML_PATH%\\ingress.yml --namespace=%K8S_NAMESPACE%
                         '''
                     }
                 }
@@ -212,15 +205,6 @@ pipeline {
                     }
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo 'Pipeline executed successfully! Deployment is stable.'
-        }
-        failure {
-            echo 'Pipeline failed. Check logs for details.'
         }
     }
 }
