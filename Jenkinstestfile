@@ -6,7 +6,7 @@ pipeline {
         FRONTEND_IMAGE = 'tejaroyal/edufrontend-app'
         BACKEND_IMAGE = 'tejaroyal/edubackend-app'
         K8S_NAMESPACE = 'edu-meet'
-        MAVEN_HOME = '/usr/local/maven'  // Adjust according to the installation path on Unix
+        // MAVEN_HOME = '/usr/local/maven'  // Adjust according to the installation path on Unix
     }
 
     stages {
@@ -50,21 +50,21 @@ pipeline {
             }
         }
 
-        stage('Maven Build') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            mvn clean install -DskipTests
-                        '''
-                    } else {
-                        bat '''
-                            mvn clean install -DskipTests
-                        '''
-                    }
-                }
-            }
-        }
+        // stage('Maven Build') {
+        //     steps {
+        //         script {
+        //             if (isUnix()) {
+        //                 sh '''
+        //                     mvn clean install -DskipTests
+        //                 '''
+        //             } else {
+        //                 bat '''
+        //                     mvn clean install -DskipTests
+        //                 '''
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Build & Push Docker Images') {
             steps {
